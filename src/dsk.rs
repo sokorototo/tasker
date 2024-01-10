@@ -28,20 +28,6 @@ impl<'tasks, O> DSK<'tasks, O> {
         self.check_cyclic_dependencies(key)
     }
 
-    /// Generates a new DSK from an Iterator of str and Tasks
-    pub fn from_iter<I, T>(iter: I) -> Result<Self, ExecuteError>
-    where
-        I: IntoIterator<Item = (&'tasks str, T)>,
-        T: Task<O> + 'tasks,
-    {
-        let mut dsk = Self::new();
-
-        iter.into_iter()
-            .try_for_each(|(key, task)| dsk.add_task(key, task))?;
-
-        Ok(dsk)
-    }
-
     /// Culls any tasks that are not useful in resolving the provided tasks
     pub fn cull(mut self, keys: &[&str]) -> Result<DSK<'tasks, O>, ExecuteError> {
         let mut required = HashSet::new();
@@ -72,9 +58,7 @@ impl<'tasks, O> DSK<'tasks, O> {
             read_dependencies(&self, task, &mut required)?;
         }
 
-        dbg!(&required);
         self.0.retain(|key, _| required.contains(key));
-
         Ok(self)
     }
 
@@ -147,8 +131,7 @@ impl<'tasks, O: Clone> DSK<'tasks, O> {
         cache: &mut BTreeMap<&'tasks str, O>,
     ) -> Result<O, ExecuteError> {
         let dependencies = {
-            let map = &mut self.0;
-            let task = map.get(task_name);
+            let task = self.0.get(task_name);
             task.map(|d| d.dependencies())
                 .ok_or(ExecuteError::MissingDependency(task_name.to_string()))?
         };
@@ -162,5 +145,21 @@ impl<'tasks, O: Clone> DSK<'tasks, O> {
             .get_mut(task_name)
             .ok_or(ExecuteError::MissingDependency(task_name.to_string()))?;
         task.get(cache).cloned()
+    }
+}
+
+impl<'tasks, O, I, T> std::iter::FromIterator<(I, T)> for DSK<'tasks, O>
+where
+    I: Into<&'tasks str>,
+    T: Task<O> + 'tasks,
+{
+    /// Generates a new DSK from an Iterator of str and Tasks
+    fn from_iter<Iter: IntoIterator<Item = (I, T)>>(iter: Iter) -> Self {
+        let mut dsk = Self::new();
+
+        iter.into_iter()
+            .for_each(|(key, task)| dsk.add_task(key.into(), task).unwrap());
+
+        dsk
     }
 }

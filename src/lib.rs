@@ -1,6 +1,6 @@
-#![deny(missing_docs)]
-
 //! A simple Task Execution and Dependency management crate, reminiscent of dask.py.
+
+#![deny(missing_docs)]
 
 mod cache;
 mod dsk;
