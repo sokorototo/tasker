@@ -1,5 +1,9 @@
 use crate::{Cache, ExecuteError, Task};
-use std::collections::{BTreeMap, HashSet};
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    string::ToString,
+    vec::Vec,
+};
 
 /// A DSK is a directed acyclic graph of Tasks.
 /// It is used to execute a series of tasks in a specific order.
@@ -30,12 +34,12 @@ impl<'tasks, O> DSK<'tasks, O> {
 
     /// Culls any tasks that are not useful in resolving the provided tasks
     pub fn cull(mut self, keys: &[&str]) -> Result<DSK<'tasks, O>, ExecuteError> {
-        let mut required = HashSet::new();
+        let mut required = BTreeSet::new();
 
         fn read_dependencies<'tasks, O>(
             dsk: &DSK<'tasks, O>,
             key: &'tasks str,
-            required: &mut HashSet<&'tasks str>,
+            required: &mut BTreeSet<&'tasks str>,
         ) -> Result<(), ExecuteError> {
             if required.contains(key) {
                 return Ok(());
@@ -63,11 +67,11 @@ impl<'tasks, O> DSK<'tasks, O> {
     }
 
     /// Returns a Set of all the keys in the DSK, that are also in the slice provided
-    pub fn keys_in_dsk(&self, tasks: &[&dyn Task<O>]) -> HashSet<&'tasks str> {
+    pub fn keys_in_dsk(&self, tasks: &[&dyn Task<O>]) -> BTreeSet<&'tasks str> {
         let tasks_iter = tasks
             .into_iter()
             .flat_map(|t| t.dependencies().into_iter())
-            .collect::<HashSet<_>>();
+            .collect::<BTreeSet<_>>();
         self.0
             .keys()
             .filter(|k| tasks_iter.contains(*k))
@@ -76,7 +80,7 @@ impl<'tasks, O> DSK<'tasks, O> {
     }
 
     /// Gives us a Set of direct dependencies
-    pub fn get_dependents(&self, leaf: &str) -> HashSet<&'tasks str> {
+    pub fn get_dependents(&self, leaf: &str) -> BTreeSet<&'tasks str> {
         self.0
             .iter()
             .filter(|(_, task)| task.dependencies().contains(&leaf))
@@ -86,13 +90,13 @@ impl<'tasks, O> DSK<'tasks, O> {
 
     /// This checks for cyclic dependencies in the graph during task insertion.
     pub fn check_cyclic_dependencies(&self, root: &str) -> Result<(), ExecuteError> {
-        let mut visited = HashSet::new();
+        let mut visited = BTreeSet::new();
         let mut stack = Vec::with_capacity(self.0.len() / 2);
 
         fn find_cycles<'root, O>(
             dsk: &DSK<'root, O>,
             root: &'root str,
-            visited: &mut HashSet<&'root str>,
+            visited: &mut BTreeSet<&'root str>,
             stack: &mut Vec<&'root str>,
         ) -> Result<(), ExecuteError> {
             stack.push(root);
@@ -124,7 +128,7 @@ impl<'tasks, O> DSK<'tasks, O> {
 impl<'tasks, O: Clone> DSK<'tasks, O> {
     /// Executes the queried task, resolving it's dependencies and caching the result
     /// O implements Clone, so we can cache the result
-    pub fn get(
+    pub fn execute(
         &mut self,
         task_name: &'tasks str,
         // ==+== ==+== ==+== //
@@ -137,7 +141,7 @@ impl<'tasks, O: Clone> DSK<'tasks, O> {
         };
 
         for dep in dependencies {
-            self.get(dep, cache)?;
+            self.execute(dep, cache)?;
         }
 
         let map = &mut self.0;
@@ -148,7 +152,7 @@ impl<'tasks, O: Clone> DSK<'tasks, O> {
     }
 }
 
-impl<'tasks, O, I, T> std::iter::FromIterator<(I, T)> for DSK<'tasks, O>
+impl<'tasks, O, I, T> core::iter::FromIterator<(I, T)> for DSK<'tasks, O>
 where
     I: Into<&'tasks str>,
     T: Task<O> + 'tasks,
